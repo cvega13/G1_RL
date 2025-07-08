@@ -54,9 +54,8 @@ class HumanoidPickPlaceEnv(BaseEnv):
         self.kitchen_scene = self.scene_builder.build(scale=self.kitchen_scene_scale)
 
         # Refrigerator
-        scene = sapien.Scene()
-        scene.set_timestep(1 / 100.0)
-        loader = scene.create_urdf_loader()
+        loader = self.scene.create_urdf_loader()
+        self.scene.set_timestep(1 / 100.0)
         loader.fix_root_link = True
         current_file_path = os.path.abspath(__file__)
         current_directory = os.path.dirname(current_file_path)
@@ -104,7 +103,7 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
         self.init_robot_pose = copy.deepcopy(
             UnitreeG1.keyframes["standing"].pose
         )
-        self.init_robot_pose.p = [-0.3, 0, 0.755]
+        self.init_robot_pose.p = [-0.6, 0, 0.755]
         super().__init__(*args, robot_uids=robot_uids, **kwargs)
 
     @property
@@ -136,9 +135,21 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
     def _load_scene(self, options: Dict):
         super()._load_scene(options)
 
+        # Position Fridge
+        mesh = self.fridge.get_first_visual_mesh()
+        z_min = mesh.bounding_box.bounds[0][2]
+        self.fridge.initial_pose = sapien.Pose(p=[0.15, -1.9, -z_min])  # Place it visibly
+
+
 
     def _initialize_episode(self, env_idx: torch.Tensor, options: Dict):
-        pass
+        super()._initialize_episode(env_idx, options)
+        with torch.device(self.device):
+            b = len(env_idx)
+            
+            # Position G1RL
+            self.agent.robot.set_qpos(self.agent.keyframes["standing"].qpos)
+            self.agent.robot.set_pose(self.init_robot_pose)
 
     def evaluate(self):
         return {
