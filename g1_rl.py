@@ -15,7 +15,11 @@ from mani_skill.utils.registration import register_env
 from mani_skill.utils.structs.types import SimConfig
 from mani_skill.utils.scene_builder.kitchen_counter import KitchenCounterSceneBuilder
 from mani_skill.utils.structs.types import GPUMemoryConfig, SceneConfig
+from mani_skill.envs.utils.randomization import random_quaternions
+from mani_skill.utils.structs.pose import Pose
 
+# YCB Asset Dataset
+from mani_skill.utils.building.actors import ycb
 
 class HumanoidPickPlaceEnv(BaseEnv):
     SUPPORTED_REWARD_MODES = ["sparse", "none"]
@@ -63,9 +67,47 @@ class HumanoidPickPlaceEnv(BaseEnv):
         self.fridge = loader.load(current_directory + urdf_path)
         assert self.fridge, "failed to load URDF."
 
+        # Banana
+        # model_id = "011_banana"
+        # builder = ycb.get_ycb_builder(
+        #     scene=self.scene,
+        #     id=model_id
+        # )
+        # builder.initial_pose = sapien.Pose(p=[0.2,-0.7,1])
+        # self.obj = builder.build(name=model_id)
+
+        # Apple
+        model_id = "013_apple"
+        builder = ycb.get_ycb_builder(
+            scene=self.scene,
+            id=model_id
+        )
+        builder.initial_pose = sapien.Pose(p=[0.2,-1.0,1])
+        self.obj = builder.build(name=model_id)
+
+        # # Orange
+        # model_id = "017_orange"
+        # builder = ycb.get_ycb_builder(
+        #     scene=self.scene,
+        #     id=model_id
+        # )
+        # builder.initial_pose = sapien.Pose(p=[0.2,-1.2,1])
+        # self.obj = builder.build(name=model_id)
+
 
     def _initialize_episode(self, env_idx: torch.Tensor, options: dict):
+        b = len(env_idx)
         self.scene_builder.initialize(env_idx)
+
+        # Randomizes position of the object
+        base = torch.tensor([0.2,-0.7, 1])
+        p = base.repeat(b, 1)
+        offset = torch.rand((b, 2)) * 0.2 - 0.1
+        p[:, :2] += offset
+
+        qs = random_quaternions(b, lock_x=True, lock_y=True)
+        obj_pose = Pose.create_from_pq(p=p, q=qs)
+        self.obj.set_pose(obj_pose)
 
     def evaluate(self):
         return {
@@ -147,7 +189,7 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
         with torch.device(self.device):
             b = len(env_idx)
             
-            # Position G1RL
+            # Position G1RL 
             self.agent.robot.set_qpos(self.agent.keyframes["standing"].qpos)
             self.agent.robot.set_pose(self.init_robot_pose)
 
@@ -158,6 +200,7 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
         }
 
     def _get_obs_extra(self, info: Dict):
+        
         return dict()
 
     def compute_dense_reward(self, obs: Any, action: torch.Tensor, info: Dict):

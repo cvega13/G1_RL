@@ -17,8 +17,8 @@ print("Action Space", env.action_space)
 obs, _ = env.reset(seed=0)
 done = False
 while True:
-    #action = env.action_space.sample()
-    #obs, reward, terminated, truncated, info = env.step(action)
-    #done = terminated or truncated
+    action = env.action_space.sample()
+    obs, reward, terminated, truncated, info = env.step(action)
+    done = terminated or truncated
     env.render()
 
