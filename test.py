@@ -1,9 +1,10 @@
 import gymnasium as gym
 import mani_skill.envs
 import g1_rl
-import ppo
+import fix_g1
 
 env = gym.make(
+    #"FIX-v1",
     "G1RL-v1",
     #"UnitreeG1PlaceAppleInBowl-v1",
     num_envs=1,

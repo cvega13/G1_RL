@@ -21,6 +21,13 @@ from mani_skill.utils.wrappers.flatten import FlattenActionSpaceWrapper
 from mani_skill.utils.wrappers.record import RecordEpisode
 from mani_skill.vector.wrappers.gymnasium import ManiSkillVectorEnv
 
+import g1_rl
+import fix_g1
+from mani_skill.envs.sapien_env import SimConfig
+
+sim_cfg = SimConfig()
+sim_cfg.use_gpu_pipeline = False
+
 @dataclass
 class Args:
     exp_name: Optional[str] = None
@@ -37,7 +44,7 @@ class Args:
     """the wandb's project name"""
     wandb_entity: Optional[str] = None
     """the entity (team) of wandb's project"""
-    capture_video: bool = True
+    capture_video: bool = False #True
     """whether to capture videos of the agent performances (check out `videos` folder)"""
     save_model: bool = True
     """whether to save model into the `runs/{run_name}` folder"""

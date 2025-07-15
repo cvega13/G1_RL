@@ -1,3 +1,7 @@
+
+
+
+
 import copy
 from typing import Any, Dict, Union
 
@@ -24,40 +28,69 @@ from mani_skill.utils.building.actors import ycb
 
 FRIDGE_BOTTOM_Z_OFFSET = -0.9700819821870343     # Offset value of fridge to be on the ground
 
-class HumanoidPickPlaceEnv(BaseEnv):
-    SUPPORTED_REWARD_MODES = ["sparse", "none"]
+
+@register_env("FIX-v1", max_episode_steps=200)
+class UnitreeG1PutInFridge(BaseEnv):
+    """
+    **Task Description:**
+    Control the humanoid unitree G1 robot to grab an item with its right arm and place it inside a fridge
+
+    **Randomizations:**
+    - the items's xy position is randomized on top of a table in the region [0.025, 0.025] x [-0.025, -0.025]. It is placed flat on the table
+    - the item's z-axis rotation is randomized to a random angle
+
+    **Success Conditions:**
+    - the item position is within the bounds of the fridge's shelf.
+    - the fridge door is closed
+
+    **Goal Specification:**
+    - The fridges's 3D position
+    """ 
+    SUPPORTED_ROBOTS = ["unitree_g1_simplified_upper_body_with_head_camera"]
+    SUPPORTED_REWARD_MODES = ["normalized_dense", "dense", "sparse", "none"]
+    agent: UnitreeG1UpperBodyWithHeadCamera
+
     """sets up a basic scene with an item to pick up and a fridge to place it in"""
     kitchen_scene_scale = 1.0
 
-    def __init__(self, *args, robot_init_qpos_noise=0.02, **kwargs):
+    def __init__(self, *args, robot_init_qpos_noise=0.02, robot_uids="unitree_g1_simplified_upper_body_with_head_camera", **kwargs):
         self.robot_init_qpos_noise = robot_init_qpos_noise
-        super().__init__(*args, **kwargs)
+        self.init_robot_pose = copy.deepcopy(
+            UnitreeG1UpperBodyWithHeadCamera.keyframes["standing"].pose
+        )
+        self.init_robot_pose.p = [-0.6, -1.3, 0.755]
+        super().__init__(*args, robot_uids=robot_uids, **kwargs)
 
     @property
     def _default_sim_config(self):
         return SimConfig(
             gpu_memory_config=GPUMemoryConfig(
-                max_rigid_contact_count=2**18,
-            )
+                max_rigid_contact_count=2**18, max_rigid_patch_count=2**21
+            ),
+            # TODO (stao): G1 robot may need some custom collision disabling as the dextrous fingers may often be close to each other
+            # and slow down simulation. A temporary fix is to reduce contact_offset value down so that we don't check so many possible
+            # collisions
+            scene_config=SceneConfig(contact_offset=0.01),
         )
 
     @property
     def _default_sensor_configs(self):
-        pose = sapien_utils.look_at(eye=[0.3, 0, 0.6], target=[-0.1, 0, 0.1])
-        return [
-            CameraConfig("base_camera", pose=pose, width=128, height=128, fov=np.pi / 2)
-        ]
+        pose = sapien.Pose([-0.279123, -0.503438, 1.54794], [0.252428, 0.396735, 0.114442, -0.875091])
+        return CameraConfig(
+            uid="base_camera", pose=pose, width=128, height=128, fov=np.pi / 2, near=0.01, far=100,
+        )
 
     @property
     def _default_human_render_camera_configs(self):
-        pose = sapien_utils.look_at([0.6, 0.7, 0.6], [0.0, 0.0, 0.35])
-        return CameraConfig("render_camera", pose=pose, width=512, height=512, fov=1)
+        pose = sapien.Pose([0.279123, -0.503438, 1.54794], [0.252428, 0.396735, 0.114442, -0.875091])
+        return CameraConfig(
+            uid="render_camera", pose=pose, width=512, height=512, fov=np.pi / 2, near=0.01, far=100,
+        )
 
     def _load_agent(self, options: dict):
-        pose = sapien.Pose(p=[-0.6, -1.3, 0.755])
-        super()._load_agent(options, pose)
+        super()._load_agent(options, sapien.Pose(p=[0, 0, 1]))
 
-    def _load_scene(self, options: dict):
+    def _load_scene(self, options: Dict):
         self.scene_builder = KitchenCounterSceneBuilder(self)
         self.kitchen_scene = self.scene_builder.build(scale=self.kitchen_scene_scale)
 
@@ -87,7 +120,7 @@ class HumanoidPickPlaceEnv(BaseEnv):
             pose=fix_rotation_pose,
             scale=[scale] * 3,
         )
-        builder.set_initial_pose(sapien.Pose(p=[0.05, -1.3, 1.07], q=[0, 0, 0, 1]))
+        builder.initial_pose = sapien.Pose(p=[0.05, -1.3, 1.07])
         self.bowl = builder.build_kinematic(name="bowl")
 
         # Apple
@@ -96,87 +129,15 @@ class HumanoidPickPlaceEnv(BaseEnv):
             scene=self.scene,
             id=model_id
         )
-        builder.set_initial_pose(sapien.Pose(p=[0.2,-1.0, 1.0], q=[0, 0, 0, 1]))
+        builder.initial_pose = sapien.Pose(p=[0.2,-1.0, 1.0])
         self.apple = builder.build(name=model_id)
-
-
-    def _initialize_episode(self, env_idx: torch.Tensor, options: dict):
-        b = len(env_idx)
-        self.scene_builder.initialize(env_idx)
-
-    def evaluate(self):
-        return {
-            "success": torch.zeros(self.num_envs, device=self.device, dtype=bool),
-            "fail": torch.zeros(self.num_envs, device=self.device, dtype=bool),
-        }
-
-    def _get_obs_extra(self, info: Dict):
-        return dict()
-
-
-
-@register_env("G1RL-v1", max_episode_steps=200)
-class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
-    """
-    **Task Description:**
-    Control the humanoid unitree G1 robot to grab an item with its right arm and place it inside a fridge
-
-    **Randomizations:**
-    - the items's xy position is randomized on top of a table in the region [0.025, 0.025] x [-0.025, -0.025]. It is placed flat on the table
-    - the item's z-axis rotation is randomized to a random angle
-
-    **Success Conditions:**
-    - the item position is within the bounds of the fridge's shelf.
-    - the fridge door is closed
-
-    **Goal Specification:**
-    - The fridges's 3D position
-    """ 
-    SUPPORTED_ROBOTS = ["unitree_g1_simplified_upper_body_with_head_camera"]
-    SUPPORTED_REWARD_MODES = ["normalized_dense", "dense", "sparse", "none"]
-    agent: UnitreeG1UpperBodyWithHeadCamera
-
-    def __init__(self, *args, robot_uids="unitree_g1_simplified_upper_body_with_head_camera", **kwargs):
-        self.init_robot_pose = copy.deepcopy(
-            UnitreeG1UpperBodyWithHeadCamera.keyframes["standing"].pose
-        )
-        self.init_robot_pose.p = [-0.6, -1.3, 0.755]
-        super().__init__(*args, robot_uids=robot_uids, **kwargs)
-
-    @property
-    def _default_sim_config(self):
-        return SimConfig(
-            gpu_memory_config=GPUMemoryConfig(
-                max_rigid_contact_count=2**18, max_rigid_patch_count=2**18
-            ),
-            # TODO (stao): G1 robot may need some custom collision disabling as the dextrous fingers may often be close to each other
-            # and slow down simulation. A temporary fix is to reduce contact_offset value down so that we don't check so many possible
-            # collisions
-            scene_config=SceneConfig(contact_offset=0.0),
-        )
-
-    @property
-    def _default_sensor_configs(self):
-        pose = sapien.Pose([-0.279123, -0.503438, 1.54794], [0.252428, 0.396735, 0.114442, -0.875091])
-        return CameraConfig(
-            uid="base_camera", pose=pose, width=128, height=128, fov=np.pi / 2, near=0.01, far=100,
-        )
-
-    @property
-    def _default_human_render_camera_configs(self):
-        pose = sapien.Pose([0.279123, -0.503438, 1.54794], [0.252428, 0.396735, 0.114442, -0.875091])
-        return CameraConfig(
-            uid="render_camera", pose=pose, width=512, height=512, fov=np.pi / 2, near=0.01, far=100,
-        )
-
-    def _load_scene(self, options: Dict):
-        super()._load_scene(options)
 
 
     def _initialize_episode(self, env_idx: torch.Tensor, options: Dict):
         super()._initialize_episode(env_idx, options)
         with torch.device(self.device):
             b = len(env_idx)
+            self.scene_builder.initialize(env_idx)
         
             # Position G1RL 
             self.agent.robot.set_qpos(self.agent.keyframes["standing"].qpos)
@@ -191,13 +152,13 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
             obj_pose = Pose.create_from_pq(p=p, q=qs)
             self.apple.set_pose(obj_pose)
 
-            # # Position bowl
-            p[:, 2] -= 0.2
-            obj_pose = Pose.create_from_pq(p=p, q=qs)
-            self.bowl.set_pose(obj_pose)
+            # Position bowl
+            # p[:, 2] -= 0.2
+            # obj_pose = Pose.create_from_pq(p=p, q=qs)
+            # self.bowl.set_pose(obj_pose)
 
-            # # Position Fridge
-            self.fridge.set_pose(sapien.Pose(p=[0.15, -1.9, -FRIDGE_BOTTOM_Z_OFFSET]))
+            # Position Fridge
+            # self.fridge.set_pose(sapien.Pose(p=[0.15, -1.9, -FRIDGE_BOTTOM_Z_OFFSET]))
 
 
 
@@ -208,9 +169,7 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
         }
 
     def _get_obs_extra(self, info: Dict):
-        obs = dict(
-
-        )
+        
         return dict()
 
     def compute_dense_reward(self, obs: Any, action: torch.Tensor, info: Dict):
@@ -228,12 +187,3 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
         max_reward = 1.0
         return self.compute_dense_reward(obs=obs, action=action, info=info) / max_reward
     
-"""
-python ppo.py --env_id="G1RL-v1" \
-  --num_envs=64 --update_epochs=8 --num_minibatches=32 \
-  --total_timesteps=2_000_000 --eval_freq=10 --num-steps=20
-
-python ppo.py --env_id="G1RL-v1" \
-   --evaluate --checkpoint=path/to/model.pt \
-   --num_eval_envs=1 --num-eval-steps=1000
-"""
