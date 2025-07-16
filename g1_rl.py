@@ -37,7 +37,7 @@ class HumanoidPickPlaceEnv(BaseEnv):
     def _default_sim_config(self):
         return SimConfig(
             gpu_memory_config=GPUMemoryConfig(
-                max_rigid_contact_count=2**18,
+                max_rigid_contact_count=2**22,
             )
         )
 
@@ -67,12 +67,11 @@ class HumanoidPickPlaceEnv(BaseEnv):
 
         # Refrigerator
         loader = self.scene.create_urdf_loader()
-        loader.pose = sapien.Pose(p=[0.15, -1.9, -FRIDGE_BOTTOM_Z_OFFSET])
-        self.scene.set_timestep(1 / 100.0)
-        loader.fix_root_link = True
         urdf_path = "/11211/mobility.urdf"
-        self.fridge = loader.load(model_dir + urdf_path)
-        assert self.fridge, "failed to load URDF."
+        articulation_builders = loader.parse(model_dir + urdf_path)["articulation_builders"]
+        builder = articulation_builders[0]
+        builder.initial_pose = sapien.Pose(p=[0.2, -1.9, -FRIDGE_BOTTOM_Z_OFFSET])
+        self.fridge = builder.build(name="fridge")
 
         # Bowl
         builder = self.scene.create_actor_builder()
@@ -119,10 +118,10 @@ class HumanoidPickPlaceEnv(BaseEnv):
 class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
     """
     **Task Description:**
-    Control the humanoid unitree G1 robot to grab an item with its right arm and place it inside a fridge
+    Control the humanoid unitree G1 robot to grab an item and place it inside a fridge
 
     **Randomizations:**
-    - the items's xy position is randomized on top of a table in the region [0.025, 0.025] x [-0.025, -0.025]. It is placed flat on the table
+    - the items's xy position is randomized on top of a table in the region [0.025, 0.025] x [-0.025, -0.025]. It is placed inside a bowl on the table
     - the item's z-axis rotation is randomized to a random angle
 
     **Success Conditions:**
@@ -140,30 +139,32 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
         self.init_robot_pose = copy.deepcopy(
             UnitreeG1UpperBodyWithHeadCamera.keyframes["standing"].pose
         )
-        self.init_robot_pose.p = [-0.6, -1.3, 0.755]
+        self.init_robot_pose.p = [-0.4, -1.3, 0.755]
         super().__init__(*args, robot_uids=robot_uids, **kwargs)
 
     @property
     def _default_sim_config(self):
         return SimConfig(
             gpu_memory_config=GPUMemoryConfig(
-                max_rigid_contact_count=2**18, max_rigid_patch_count=2**18
+                max_rigid_contact_count=2**22, max_rigid_patch_count=2**21
             ),
             # TODO (stao): G1 robot may need some custom collision disabling as the dextrous fingers may often be close to each other
             # and slow down simulation. A temporary fix is to reduce contact_offset value down so that we don't check so many possible
             # collisions
-            scene_config=SceneConfig(contact_offset=0.0),
+            scene_config=SceneConfig(contact_offset=0.01),
         )
 
     @property
     def _default_sensor_configs(self):
-        pose = sapien.Pose([-0.279123, -0.503438, 1.54794], [0.252428, 0.396735, 0.114442, -0.875091])
+        #pose = sapien.Pose([-1.2, -1.5, 1.7], [1.0, 0.09, 0.3, -0.2])
+        pose = sapien.Pose([0.279123, -0.503438, 1.54794], [0.252428, 0.396735, 0.114442, -0.875091])
         return CameraConfig(
             uid="base_camera", pose=pose, width=128, height=128, fov=np.pi / 2, near=0.01, far=100,
         )
 
     @property
     def _default_human_render_camera_configs(self):
+        #pose = sapien.Pose([-1.2, -1.5, 1.7], [1.0, 0.09, 0.3, -0.2])
         pose = sapien.Pose([0.279123, -0.503438, 1.54794], [0.252428, 0.396735, 0.114442, -0.875091])
         return CameraConfig(
             uid="render_camera", pose=pose, width=512, height=512, fov=np.pi / 2, near=0.01, far=100,
@@ -191,13 +192,13 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
             obj_pose = Pose.create_from_pq(p=p, q=qs)
             self.apple.set_pose(obj_pose)
 
-            # # Position bowl
+            # Position bowl
             p[:, 2] -= 0.2
             obj_pose = Pose.create_from_pq(p=p, q=qs)
             self.bowl.set_pose(obj_pose)
 
-            # # Position Fridge
-            self.fridge.set_pose(sapien.Pose(p=[0.15, -1.9, -FRIDGE_BOTTOM_Z_OFFSET]))
+            # Position Fridge
+            self.fridge.set_pose(sapien.Pose(p=[0.2, -1.9, -FRIDGE_BOTTOM_Z_OFFSET], q=[1, 0, 0, 0]))
 
 
 
@@ -229,11 +230,13 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
         return self.compute_dense_reward(obs=obs, action=action, info=info) / max_reward
     
 """
-python ppo.py --env_id="G1RL-v1" \
-  --num_envs=64 --update_epochs=8 --num_minibatches=32 \
-  --total_timesteps=2_000_000 --eval_freq=10 --num-steps=20
+CUDA_VISIBLE_DEVICES=0 python ppo.py --env_id="G1RL-v1" --no-capture-video \
+    --num_envs=2048 --update_epochs=8 --num_minibatches=32 \
+    --total_timesteps=4_000_000 --eval_freq=10 --num-steps=20
+    
+CUDA_VISIBLE_DEVICES=0 python ppo.py --env_id="G1RL-v1" --capture-video \
+    --evaluate --checkpoint=runs/G1RL-v1__ppo__1__1752696234/final_ckpt.pt \
+    --num_eval_envs=6 --num-eval-steps=1500 
 
-python ppo.py --env_id="G1RL-v1" \
-   --evaluate --checkpoint=path/to/model.pt \
-   --num_eval_envs=1 --num-eval-steps=1000
+watch -n 1 nvidia-smi
 """

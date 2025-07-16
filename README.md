@@ -13,12 +13,13 @@ Scene:
     - Hindges open/close
     - Has shelves
 - Table
-    - Has item(s) on the table
+    - Has object on table
+        - Object is held inside a bowl for stability
 
 Goal:
-- Agent goes to refridgerator and opens the door
-- Agent goes to table and grabs object
-- Agent goes to refridgerator and places the object inside on a shelf
+- Agent opens refridgerator door
+- Agent grabs object on the table
+- Agent places the object inside the refridgerator on a shelf
 - Agent closes the refridgerator with object inside
 
 
