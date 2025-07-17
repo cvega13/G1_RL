@@ -54,7 +54,7 @@ class HumanoidPickPlaceEnv(BaseEnv):
         return CameraConfig("render_camera", pose=pose, width=512, height=512, fov=1)
 
     def _load_agent(self, options: dict):
-        pose = sapien.Pose(p=[-0.6, -1.3, 0.755])
+        pose = sapien.Pose(p=[-0.5, -1.34, 0.755])
         super()._load_agent(options, pose)
 
     def _load_scene(self, options: dict):
@@ -74,20 +74,20 @@ class HumanoidPickPlaceEnv(BaseEnv):
         self.fridge = builder.build(name="fridge")
 
         # Bowl
-        builder = self.scene.create_actor_builder()
-        fix_rotation_pose = sapien.Pose(q=euler2quat(np.pi / 2, 0, 0))
-        builder.add_nonconvex_collision_from_file(
-            filename=os.path.join(model_dir, "frl_apartment_bowl_07.ply"),
-            pose=fix_rotation_pose,
-            scale=[scale] * 3,
-        )
-        builder.add_visual_from_file(
-            filename=os.path.join(model_dir, "frl_apartment_bowl_07.glb"),
-            pose=fix_rotation_pose,
-            scale=[scale] * 3,
-        )
-        builder.set_initial_pose(sapien.Pose(p=[0.05, -1.3, 1.07], q=[0, 0, 0, 1]))
-        self.bowl = builder.build_kinematic(name="bowl")
+        # builder = self.scene.create_actor_builder()
+        # fix_rotation_pose = sapien.Pose(q=euler2quat(np.pi / 2, 0, 0))
+        # builder.add_nonconvex_collision_from_file(
+        #     filename=os.path.join(model_dir, "frl_apartment_bowl_07.ply"),
+        #     pose=fix_rotation_pose,
+        #     scale=[scale] * 3,
+        # )
+        # builder.add_visual_from_file(
+        #     filename=os.path.join(model_dir, "frl_apartment_bowl_07.glb"),
+        #     pose=fix_rotation_pose,
+        #     scale=[scale] * 3,
+        # )
+        # builder.set_initial_pose(sapien.Pose(p=[0.05, -1.3, 1.07], q=[0, 0, 0, 1]))
+        # self.bowl = builder.build_kinematic(name="bowl")
 
         # Apple
         model_id = "013_apple"
@@ -139,14 +139,14 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
         self.init_robot_pose = copy.deepcopy(
             UnitreeG1UpperBodyWithHeadCamera.keyframes["standing"].pose
         )
-        self.init_robot_pose.p = [-0.4, -1.3, 0.755]
+        self.init_robot_pose.p = [-0.5, -1.3, 0.755]
         super().__init__(*args, robot_uids=robot_uids, **kwargs)
 
     @property
     def _default_sim_config(self):
         return SimConfig(
             gpu_memory_config=GPUMemoryConfig(
-                max_rigid_contact_count=2**22, max_rigid_patch_count=2**21
+                max_rigid_contact_count=2**22, max_rigid_patch_count=2**21,
             ),
             # TODO (stao): G1 robot may need some custom collision disabling as the dextrous fingers may often be close to each other
             # and slow down simulation. A temporary fix is to reduce contact_offset value down so that we don't check so many possible
@@ -193,9 +193,9 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
             self.apple.set_pose(obj_pose)
 
             # Position bowl
-            p[:, 2] -= 0.2
-            obj_pose = Pose.create_from_pq(p=p, q=qs)
-            self.bowl.set_pose(obj_pose)
+            # p[:, 2] -= 0.2
+            # obj_pose = Pose.create_from_pq(p=p, q=qs)
+            # self.bowl.set_pose(obj_pose)
 
             # Position Fridge
             self.fridge.set_pose(sapien.Pose(p=[0.2, -1.9, -FRIDGE_BOTTOM_Z_OFFSET], q=[1, 0, 0, 0]))
@@ -203,30 +203,53 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
 
 
     def evaluate(self):
+        is_grasped = self.agent.left_hand_is_grasping(self.apple, max_angle=110)
+        apple_fell = self.apple.pose.p[..., 2] <= 0.5
+
         return {
-            "success": torch.zeros(self.num_envs, device=self.device, dtype=bool),
-            "fail": torch.zeros(self.num_envs, device=self.device, dtype=bool),
+            "success": is_grasped,  # Temporary Success Condition
+            "fail": apple_fell,
+            "is_grasped": is_grasped,
         }
 
     def _get_obs_extra(self, info: Dict):
         obs = dict(
-
+            is_grasped=info["is_grasped"]
         )
         return dict()
 
     def compute_dense_reward(self, obs: Any, action: torch.Tensor, info: Dict):
+        # Reach for apple
         left_hand_to_obj_dist = torch.linalg.norm(
             self.apple.pose.p - self.agent.left_tcp.pose.p, axis=1
         )
         reaching_apple_reward = 1 - torch.tanh(5 * left_hand_to_obj_dist)
         reward = reaching_apple_reward
 
+        # Grasp apple
+        is_grasped = info["is_grasped"]
+        reward += is_grasped
+
+        # Reward to open the door
+        door_open_pos = [-0.651, -0.651, 0.276, 0.276]
+        door_close_pos = [-0.651, -0.651, 0.276, 0.276]
+
+        open_fridge_diff = torch.linalg.norm(
+            self.fridge.find_link_by_name("link_0").pose.q
+            - torch.tensor(door_open_pos), axis=1
+        )
+        open_door_reward = 1 - torch.tanh(5 * open_fridge_diff)
+        reward += open_door_reward
+
+        reward[info["fail"]] = 0.0
+        reward[info["success"]] = 3.0
+
         return reward
 
     def compute_normalized_dense_reward(
         self, obs: Any, action: torch.Tensor, info: Dict
     ):
-        max_reward = 1.0
+        max_reward = 3.0
         return self.compute_dense_reward(obs=obs, action=action, info=info) / max_reward
     
 """
@@ -235,7 +258,7 @@ CUDA_VISIBLE_DEVICES=0 python ppo.py --env_id="G1RL-v1" --no-capture-video \
     --total_timesteps=4_000_000 --eval_freq=10 --num-steps=20
     
 CUDA_VISIBLE_DEVICES=0 python ppo.py --env_id="G1RL-v1" --capture-video \
-    --evaluate --checkpoint=runs/G1RL-v1__ppo__1__1752696234/final_ckpt.pt \
+    --evaluate --checkpoint=runs/G1RL-v1__ppo__1__1752770295/final_ckpt.pt \
     --num_eval_envs=6 --num-eval-steps=1500 
 
 watch -n 1 nvidia-smi

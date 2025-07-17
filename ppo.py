@@ -22,7 +22,6 @@ from mani_skill.utils.wrappers.record import RecordEpisode
 from mani_skill.vector.wrappers.gymnasium import ManiSkillVectorEnv
 
 import g1_rl
-import fix_g1
 from mani_skill.envs.sapien_env import SimConfig
 
 sim_cfg = SimConfig()
