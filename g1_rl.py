@@ -1,10 +1,11 @@
 import copy
-from typing import Any, Dict, Union
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import sapien
 import torch
 import os
+import trimesh
 from transforms3d.euler import euler2quat
 
 from mani_skill.agents.robots.unitree_g1.g1_upper_body import UnitreeG1UpperBodyWithHeadCamera
@@ -17,17 +18,22 @@ from mani_skill.utils.structs.types import SimConfig
 from mani_skill.utils.scene_builder.kitchen_counter import KitchenCounterSceneBuilder
 from mani_skill.utils.structs.types import GPUMemoryConfig, SceneConfig
 from mani_skill.envs.utils.randomization import random_quaternions
-from mani_skill.utils.structs.pose import Pose
+from mani_skill.utils.structs import Articulation, Link, Pose
+from mani_skill.utils.geometry.geometry import transform_points
 
 # YCB Asset Dataset
 from mani_skill.utils.building.actors import ycb
+from mani_skill.utils.building import actors
 
 FRIDGE_BOTTOM_Z_OFFSET = -0.9700819821870343     # Offset value of fridge to be on the ground
+
 
 class HumanoidPickPlaceEnv(BaseEnv):
     SUPPORTED_REWARD_MODES = ["sparse", "none"]
     """sets up a basic scene with an item to pick up and a fridge to place it in"""
     kitchen_scene_scale = 1.0
+    joint_types = ["revolute", "revolute_unwrapped"]
+
 
     def __init__(self, *args, robot_init_qpos_noise=0.02, **kwargs):
         self.robot_init_qpos_noise = robot_init_qpos_noise
@@ -57,6 +63,7 @@ class HumanoidPickPlaceEnv(BaseEnv):
         pose = sapien.Pose(p=[-0.5, -1.34, 0.755])
         super()._load_agent(options, pose)
 
+
     def _load_scene(self, options: dict):
         self.scene_builder = KitchenCounterSceneBuilder(self)
         self.kitchen_scene = self.scene_builder.build(scale=self.kitchen_scene_scale)
@@ -66,12 +73,8 @@ class HumanoidPickPlaceEnv(BaseEnv):
         scale = self.kitchen_scene_scale
 
         # Refrigerator
-        loader = self.scene.create_urdf_loader()
         urdf_path = "/11211/mobility.urdf"
-        articulation_builders = loader.parse(model_dir + urdf_path)["articulation_builders"]
-        builder = articulation_builders[0]
-        builder.initial_pose = sapien.Pose(p=[0.2, -1.9, -FRIDGE_BOTTOM_Z_OFFSET])
-        self.fridge = builder.build(name="fridge")
+        self.fridge = self._load_fridge(model_dir + urdf_path)
 
         # Bowl
         # builder = self.scene.create_actor_builder()
@@ -98,6 +101,55 @@ class HumanoidPickPlaceEnv(BaseEnv):
         builder.set_initial_pose(sapien.Pose(p=[0.2,-1.0, 1.0], q=[0, 0, 0, 1]))
         self.apple = builder.build(name=model_id)
 
+
+    def _load_fridge(self, file_path):
+        loader = self.scene.create_urdf_loader()
+        articulation_builders = loader.parse(file_path)["articulation_builders"]
+        builder = articulation_builders[0]
+        builder.initial_pose = sapien.Pose(p=[0.2, -1.9, -FRIDGE_BOTTOM_Z_OFFSET])
+        fridge = builder.build(name="fridge")
+
+        handle_links: List[Link] = []
+        handle_link_meshes: List[trimesh.Trimesh] = []
+
+        for link, joint in zip(fridge.links, fridge.joints):
+            if joint.type[0] in self.joint_types:
+                handle_links.append(link)
+                handle_link_meshes.append(
+                    link.generate_mesh(
+                        filter=lambda _, render_shape: "handle"
+                        in render_shape.name,
+                        mesh_name="handle"
+                    )[0]
+                )
+
+        self.handle_link = handle_links[0]
+        self.handle_link_pos = np.array(handle_link_meshes[0].bounding_box.center_mass)
+        self.handle_link_goal = actors.build_sphere(
+            self.scene,
+            radius=0.02,
+            color=[0, 1, 0, 1],
+            name="handle_link_goal",
+            body_type="kinematic",
+            add_collision=False,
+            initial_pose=sapien.Pose(p=[0, 0, 0], q=[1, 0, 0, 0]),
+        )
+
+        return fridge
+
+    def handle_link_positions(self, env_idx: Optional[torch.Tensor] = None):
+        if env_idx is None:
+            return transform_points(
+                self.handle_link.pose.to_transformation_matrix().clone(),
+                common.to_tensor(self.handle_link_pos, device=self.device),
+            )
+        return transform_points(
+            self.handle_link.pose.to_transformation_matrix().clone(),
+            common.to_tensor(self.handle_link_pos, device=self.device),
+        ) 
+
+    # assert H.shape[1:] == (4, 4), H.shape
+    # assert pts.ndim == 2 and pts.shape[1] == 3, pts.shape
 
     def _initialize_episode(self, env_idx: torch.Tensor, options: dict):
         b = len(env_idx)
@@ -200,23 +252,45 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
             # Position Fridge
             self.fridge.set_pose(sapien.Pose(p=[0.2, -1.9, -FRIDGE_BOTTOM_Z_OFFSET], q=[1, 0, 0, 0]))
 
+            # Position Handle
+            self.handle_link_goal.set_pose(
+                Pose.create_from_pq(p=self.handle_link_positions(env_idx))
+            )
+
+
+    def _after_control_step(self):
+        # after each control step, we update the goal position of the handle link
+        # for GPU sim we need to update the kinematics data to get latest pose information for up to date link poses
+        # and fetch it, followed by an apply call to ensure the GPU sim is up to date
+        if self.gpu_sim_enabled:
+            self.scene.px.gpu_update_articulation_kinematics()
+            self.scene._gpu_fetch_all()
+        self.handle_link_goal.set_pose(
+            Pose.create_from_pq(p=self.handle_link_positions())
+        )
+        if self.gpu_sim_enabled:
+            self.scene._gpu_apply_all()
 
 
     def evaluate(self):
         is_grasped = self.agent.left_hand_is_grasping(self.apple, max_angle=110)
         apple_fell = self.apple.pose.p[..., 2] <= 0.5
+        handle_link_pos = self.handle_link_positions()
 
         return {
             "success": is_grasped,  # Temporary Success Condition
             "fail": apple_fell,
             "is_grasped": is_grasped,
+            "handle_link_pos": handle_link_pos,
         }
+
 
     def _get_obs_extra(self, info: Dict):
         obs = dict(
             is_grasped=info["is_grasped"]
         )
         return dict()
+
 
     def compute_dense_reward(self, obs: Any, action: torch.Tensor, info: Dict):
         # Reach for apple
