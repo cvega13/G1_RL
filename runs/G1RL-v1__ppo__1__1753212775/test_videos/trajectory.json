@@ -1,0 +1,449 @@
+{
+  "env_info": {
+    "env_id": "G1RL-v1",
+    "env_kwargs": {
+      "num_envs": 6,
+      "reconfiguration_freq": 1,
+      "obs_mode": "state",
+      "render_mode": "rgb_array",
+      "sim_backend": "physx_cuda",
+      "control_mode": "pd_joint_delta_pos"
+    },
+    "max_episode_steps": 200
+  },
+  "commit_info": null,
+  "episodes": [
+    {
+      "episode_id": 0,
+      "episode_seed": 1791095845,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 1,
+      "episode_seed": 1028862084,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 2,
+      "episode_seed": 870353631,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 3,
+      "episode_seed": 788373214,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 4,
+      "episode_seed": 1419052930,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 5,
+      "episode_seed": 873768326,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 6,
+      "episode_seed": 2135392491,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": true
+    },
+    {
+      "episode_id": 7,
+      "episode_seed": 1938847964,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 8,
+      "episode_seed": 2046375892,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 9,
+      "episode_seed": 160734893,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": true
+    },
+    {
+      "episode_id": 10,
+      "episode_seed": 1081929809,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": true
+    },
+    {
+      "episode_id": 11,
+      "episode_seed": 867542370,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 12,
+      "episode_seed": 946286476,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": true
+    },
+    {
+      "episode_id": 13,
+      "episode_seed": 760700860,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": true
+    },
+    {
+      "episode_id": 14,
+      "episode_seed": 264792185,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 15,
+      "episode_seed": 1437124175,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": true
+    },
+    {
+      "episode_id": 16,
+      "episode_seed": 57763239,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 17,
+      "episode_seed": 1767692546,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 18,
+      "episode_seed": 1857819720,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": true
+    },
+    {
+      "episode_id": 19,
+      "episode_seed": 2029572362,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": true
+    },
+    {
+      "episode_id": 20,
+      "episode_seed": 1595023553,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 21,
+      "episode_seed": 1163157161,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 22,
+      "episode_seed": 13283041,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": true
+    },
+    {
+      "episode_id": 23,
+      "episode_seed": 1534750363,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 24,
+      "episode_seed": 491263,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 25,
+      "episode_seed": 1929271063,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": true
+    },
+    {
+      "episode_id": 26,
+      "episode_seed": 1618738277,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": true
+    },
+    {
+      "episode_id": 27,
+      "episode_seed": 126320578,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 28,
+      "episode_seed": 1159073755,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 29,
+      "episode_seed": 519340538,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 30,
+      "episode_seed": 550290313,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": true
+    },
+    {
+      "episode_id": 31,
+      "episode_seed": 1004525138,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 32,
+      "episode_seed": 1381744147,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 33,
+      "episode_seed": 1128840731,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": true
+    },
+    {
+      "episode_id": 34,
+      "episode_seed": 1944099366,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 35,
+      "episode_seed": 1252646216,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": true
+    },
+    {
+      "episode_id": 36,
+      "episode_seed": 1298508491,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 37,
+      "episode_seed": 1645879545,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": true
+    },
+    {
+      "episode_id": 38,
+      "episode_seed": 625533604,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 39,
+      "episode_seed": 1867344442,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 40,
+      "episode_seed": 1203108654,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": true
+    },
+    {
+      "episode_id": 41,
+      "episode_seed": 1726436314,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 200,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": true
+    },
+    {
+      "episode_id": 42,
+      "episode_seed": 2143362693,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 100,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 43,
+      "episode_seed": 730047414,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 100,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 44,
+      "episode_seed": 551733411,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 100,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 45,
+      "episode_seed": 98093913,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 100,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 46,
+      "episode_seed": 1811830047,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 100,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    },
+    {
+      "episode_id": 47,
+      "episode_seed": 1371064860,
+      "control_mode": "pd_joint_delta_pos",
+      "elapsed_steps": 100,
+      "reset_kwargs": {},
+      "success": false,
+      "fail": false
+    }
+  ]
+}

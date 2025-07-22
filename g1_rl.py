@@ -25,8 +25,9 @@ from mani_skill.utils.geometry.geometry import transform_points
 from mani_skill.utils.building.actors import ycb
 from mani_skill.utils.building import actors
 
-FRIDGE_BOTTOM_Z_OFFSET = -0.9700819821870343     # Offset value of fridge to be on the ground
-
+FRIDGE_BOTTOM_Z_OFFSET = -0.9700819821870343        # Offset value of fridge to be on the ground
+door_open_qpos = [-0.651, -0.651, 0.276, 0.276]     # Rotation fridge door when open
+door_close_qpos = [-0.5, -0.5, 0.5, 0.5]            # Rotation of fridge door when closed
 
 class HumanoidPickPlaceEnv(BaseEnv):
     SUPPORTED_REWARD_MODES = ["sparse", "none"]
@@ -123,12 +124,14 @@ class HumanoidPickPlaceEnv(BaseEnv):
                     )[0]
                 )
 
+
         self.handle_link = handle_links[0]
-        self.handle_link_pos = np.array(handle_link_meshes[0].bounding_box.center_mass)
+        handle_pos_np = np.array(handle_link_meshes[0].bounding_box.center_mass)
+        self.handle_link_pos = common.to_tensor(np.tile(handle_pos_np, (self.num_envs, 1)), device=self.device)
         self.handle_link_goal = actors.build_sphere(
             self.scene,
             radius=0.02,
-            color=[0, 1, 0, 1],
+            color=[0.5, 0, 1, 0.8],
             name="handle_link_goal",
             body_type="kinematic",
             add_collision=False,
@@ -144,12 +147,9 @@ class HumanoidPickPlaceEnv(BaseEnv):
                 common.to_tensor(self.handle_link_pos, device=self.device),
             )
         return transform_points(
-            self.handle_link.pose.to_transformation_matrix().clone(),
-            common.to_tensor(self.handle_link_pos, device=self.device),
-        ) 
-
-    # assert H.shape[1:] == (4, 4), H.shape
-    # assert pts.ndim == 2 and pts.shape[1] == 3, pts.shape
+            self.handle_link.pose[env_idx].to_transformation_matrix().clone(),
+            common.to_tensor(self.handle_link_pos[env_idx], device=self.device),
+        )
 
     def _initialize_episode(self, env_idx: torch.Tensor, options: dict):
         b = len(env_idx)
@@ -236,7 +236,7 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
             self.agent.robot.set_pose(self.init_robot_pose)
 
             # Randomizes position of the object
-            base = torch.tensor([0.05, -1.3, 1.09])
+            base = torch.tensor([-0.05, -1.3, 1.0])
             p = base.repeat(b, 1)
             offset = torch.rand((b, 2)) * 0.2 - 0.1
             p[:, :2] += offset
@@ -274,46 +274,70 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
 
     def evaluate(self):
         is_grasped = self.agent.left_hand_is_grasping(self.apple, max_angle=110)
+        door_is_closed = torch.linalg.norm(
+            self.fridge.find_link_by_name("link_0").pose.q
+            - torch.tensor(door_close_qpos, device=self.device), axis=1
+        ) < 0.01
+
+        door_is_open = torch.linalg.norm(
+            self.fridge.find_link_by_name("link_0").pose.q
+            - torch.tensor(door_open_qpos, device=self.device), axis=1
+        ) < 0.05
+
         apple_fell = self.apple.pose.p[..., 2] <= 0.5
         handle_link_pos = self.handle_link_positions()
 
         return {
-            "success": is_grasped,  # Temporary Success Condition
+            "success": door_is_open,      # Temporary Success Condition
             "fail": apple_fell,
             "is_grasped": is_grasped,
+            "door_is_closed": door_is_closed,
+            "door_is_open": door_is_open,
             "handle_link_pos": handle_link_pos,
         }
 
 
     def _get_obs_extra(self, info: Dict):
         obs = dict(
+            left_hand_tcp_pos = self.agent.left_tcp.pose.p,
+            right_hand_tcp_pos = self.agent.right_tcp.pose.p,
             is_grasped=info["is_grasped"]
         )
-        return dict()
+        if "state" in self.obs_mode:
+            obs.update(
+                handle_link_pos = info["handle_link_pos"],
+                fridge_door_qpos = self.fridge.find_link_by_name("link_0").pose.q,
+                apple_pos = self.apple.pose.p
+            )
+        return obs
 
 
     def compute_dense_reward(self, obs: Any, action: torch.Tensor, info: Dict):
         # Reach for apple
-        left_hand_to_obj_dist = torch.linalg.norm(
+        left_tcp_to_obj_dist = torch.linalg.norm(
             self.apple.pose.p - self.agent.left_tcp.pose.p, axis=1
         )
-        reaching_apple_reward = 1 - torch.tanh(5 * left_hand_to_obj_dist)
+        reaching_apple_reward = 1 - torch.tanh(5 * left_tcp_to_obj_dist)
         reward = reaching_apple_reward
 
         # Grasp apple
         is_grasped = info["is_grasped"]
         reward += is_grasped
 
-        # Reward to open the door
-        door_open_pos = [-0.651, -0.651, 0.276, 0.276]
-        door_close_pos = [-0.651, -0.651, 0.276, 0.276]
 
+        right_tcp_to_handle_dist = torch.linalg.norm(
+            info["handle_link_pos"] - self.agent.right_tcp.pose.p, axis=1 
+        )
+        reaching_handle_reward = 1 - torch.tanh(5 * right_tcp_to_handle_dist)
+        reward[is_grasped] += reaching_handle_reward[is_grasped]
+
+        # Reward to open the door
         open_fridge_diff = torch.linalg.norm(
             self.fridge.find_link_by_name("link_0").pose.q
-            - torch.tensor(door_open_pos), axis=1
+            - torch.tensor(door_open_qpos, device=self.device), axis=1
         )
         open_door_reward = 1 - torch.tanh(5 * open_fridge_diff)
-        reward += open_door_reward
+        reward[is_grasped] += open_door_reward[is_grasped]
 
         reward[info["fail"]] = 0.0
         reward[info["success"]] = 3.0
@@ -332,7 +356,7 @@ CUDA_VISIBLE_DEVICES=0 python ppo.py --env_id="G1RL-v1" --no-capture-video \
     --total_timesteps=4_000_000 --eval_freq=10 --num-steps=20
     
 CUDA_VISIBLE_DEVICES=0 python ppo.py --env_id="G1RL-v1" --capture-video \
-    --evaluate --checkpoint=runs/G1RL-v1__ppo__1__1752770295/final_ckpt.pt \
+    --evaluate --checkpoint=runs/G1RL-v1__ppo__1__1753212775/final_ckpt.pt \
     --num_eval_envs=6 --num-eval-steps=1500 
 
 watch -n 1 nvidia-smi
