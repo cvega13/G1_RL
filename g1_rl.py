@@ -64,6 +64,43 @@ class HumanoidPickPlaceEnv(BaseEnv):
         pose = sapien.Pose(p=[-0.5, -1.34, 0.755])
         super()._load_agent(options, pose)
 
+        self.right_arm_joints = [
+            "right_shoulder_pitch_joint",
+            "right_shoulder_roll_joint",
+            "right_shoulder_yaw_joint",
+            "right_elbow_pitch_joint",
+            "right_elbow_roll_joint",
+            #"right_zero_joint",
+            #"right_three_joint",
+            #"right_five_joint",
+            #"right_one_joint",
+            #"right_four_joint",
+            #"right_six_joint",
+            #"right_two_joint",
+        ]
+        self.right_arm_joint_indexes = [
+            self.agent.robot.active_joints_map[joint].active_index[0].item()
+            for joint in self.right_arm_joints
+        ]
+
+        self.left_arm_joints = [
+            "left_shoulder_pitch_joint",
+            "left_shoulder_roll_joint",
+            "left_shoulder_yaw_joint",
+            "left_elbow_pitch_joint",
+            "left_elbow_roll_joint",
+            #"left_zero_joint",
+            #"left_three_joint",
+            #"left_five_joint",
+            #"left_one_joint",
+            #"left_four_joint",
+            #"left_six_joint",
+            #"left_two_joint",
+        ]
+        self.left_arm_joint_indexes = [
+            self.agent.robot.active_joints_map[joint].active_index[0].item()
+            for joint in self.left_arm_joints
+        ]
 
     def _load_scene(self, options: dict):
         self.scene_builder = KitchenCounterSceneBuilder(self)
@@ -113,6 +150,7 @@ class HumanoidPickPlaceEnv(BaseEnv):
         handle_links: List[Link] = []
         handle_link_meshes: List[trimesh.Trimesh] = []
 
+        # Find link labeled as a handle
         for link, joint in zip(fridge.links, fridge.joints):
             if joint.type[0] in self.joint_types:
                 handle_links.append(link)
@@ -124,10 +162,10 @@ class HumanoidPickPlaceEnv(BaseEnv):
                     )[0]
                 )
 
-
         self.handle_link = handle_links[0]
         handle_pos_np = np.array(handle_link_meshes[0].bounding_box.center_mass)
         self.handle_link_pos = common.to_tensor(np.tile(handle_pos_np, (self.num_envs, 1)), device=self.device)
+        # Sphere representing the handle's center of mass
         self.handle_link_goal = actors.build_sphere(
             self.scene,
             radius=0.02,
@@ -140,6 +178,7 @@ class HumanoidPickPlaceEnv(BaseEnv):
 
         return fridge
 
+    # Apply's fridge door's transformatin matrix to handle's center of mass position
     def handle_link_positions(self, env_idx: Optional[torch.Tensor] = None):
         if env_idx is None:
             return transform_points(
@@ -273,7 +312,7 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
 
 
     def evaluate(self):
-        is_grasped = self.agent.left_hand_is_grasping(self.apple, max_angle=110)
+        is_grasped = self.agent.left_hand_is_grasping(self.apple, max_angle=85)
         door_is_closed = torch.linalg.norm(
             self.fridge.find_link_by_name("link_0").pose.q
             - torch.tensor(door_close_qpos, device=self.device), axis=1
@@ -312,6 +351,12 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
         return obs
 
 
+    def joint_velocity(self, joint_indices):
+        return torch.mean(
+            torch.abs(self.agent.robot.qvel[:, joint_indices]), dim=1
+        )
+
+
     def compute_dense_reward(self, obs: Any, action: torch.Tensor, info: Dict):
         # Reach for apple
         left_tcp_to_obj_dist = torch.linalg.norm(
@@ -324,6 +369,18 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
         is_grasped = info["is_grasped"]
         reward += is_grasped
 
+
+        right_arm_velocity = self.joint_velocity(self.right_arm_joint_indexes)
+        right_arm_static_reward = 1 - torch.tanh(5 * right_arm_velocity)
+        reward[~is_grasped] += right_arm_static_reward[~is_grasped]
+
+        left_arm_velocity = self.joint_velocity(self.left_arm_joint_indexes)
+        left_arm_static_reward = 1 - torch.tanh(5 * left_arm_velocity)
+        reward[is_grasped] += left_arm_static_reward[is_grasped]
+
+        ## CONSIDER 
+        # Reward for grasping apple stable
+        # Add function to detect grasping with handle using get_pairwise_contact_forces
 
         right_tcp_to_handle_dist = torch.linalg.norm(
             info["handle_link_pos"] - self.agent.right_tcp.pose.p, axis=1 
@@ -340,23 +397,23 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
         reward[is_grasped] += open_door_reward[is_grasped]
 
         reward[info["fail"]] = 0.0
-        reward[info["success"]] = 3.0
+        reward[info["success"]] = 5.0
 
         return reward
 
     def compute_normalized_dense_reward(
         self, obs: Any, action: torch.Tensor, info: Dict
     ):
-        max_reward = 3.0
+        max_reward = 5.0
         return self.compute_dense_reward(obs=obs, action=action, info=info) / max_reward
     
 """
 CUDA_VISIBLE_DEVICES=0 python ppo.py --env_id="G1RL-v1" --no-capture-video \
     --num_envs=2048 --update_epochs=8 --num_minibatches=32 \
-    --total_timesteps=4_000_000 --eval_freq=10 --num-steps=20
+    --total_timesteps=8_000_000 --eval_freq=10 --num-steps=20
     
 CUDA_VISIBLE_DEVICES=0 python ppo.py --env_id="G1RL-v1" --capture-video \
-    --evaluate --checkpoint=runs/G1RL-v1__ppo__1__1753212775/final_ckpt.pt \
+    --evaluate --checkpoint=runs/G1RL-v1__ppo__1__1753382916/final_ckpt.pt \
     --num_eval_envs=6 --num-eval-steps=1500 
 
 watch -n 1 nvidia-smi
