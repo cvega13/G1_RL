@@ -71,11 +71,11 @@ class HumanoidPickPlaceEnv(BaseEnv):
             "right_elbow_pitch_joint",
             "right_elbow_roll_joint",
             #"right_zero_joint",
-            #"right_three_joint",
-            #"right_five_joint",
+            #"right_three_joint",   #
+            #"right_five_joint",    #
             #"right_one_joint",
-            #"right_four_joint",
-            #"right_six_joint",
+            #"right_four_joint",    #
+            #"right_six_joint",     #
             #"right_two_joint",
         ]
         self.right_arm_joint_indexes = [
@@ -113,22 +113,6 @@ class HumanoidPickPlaceEnv(BaseEnv):
         # Refrigerator
         urdf_path = "/11211/mobility.urdf"
         self.fridge = self._load_fridge(model_dir + urdf_path)
-
-        # Bowl
-        # builder = self.scene.create_actor_builder()
-        # fix_rotation_pose = sapien.Pose(q=euler2quat(np.pi / 2, 0, 0))
-        # builder.add_nonconvex_collision_from_file(
-        #     filename=os.path.join(model_dir, "frl_apartment_bowl_07.ply"),
-        #     pose=fix_rotation_pose,
-        #     scale=[scale] * 3,
-        # )
-        # builder.add_visual_from_file(
-        #     filename=os.path.join(model_dir, "frl_apartment_bowl_07.glb"),
-        #     pose=fix_rotation_pose,
-        #     scale=[scale] * 3,
-        # )
-        # builder.set_initial_pose(sapien.Pose(p=[0.05, -1.3, 1.07], q=[0, 0, 0, 1]))
-        # self.bowl = builder.build_kinematic(name="bowl")
 
         # Apple
         model_id = "013_apple"
@@ -174,6 +158,17 @@ class HumanoidPickPlaceEnv(BaseEnv):
             body_type="kinematic",
             add_collision=False,
             initial_pose=sapien.Pose(p=[0, 0, 0], q=[1, 0, 0, 0]),
+        )
+
+        # Goal for final position of apple in fridge
+        self.goal_pos = actors.build_sphere(
+            self.scene,
+            radius=0.02,
+            color=[0, 1, 0, 1],
+            name="goal_pos",
+            body_type="kinematic",
+            add_collision=False,
+            initial_pose=sapien.Pose([0, 0, 0], q=[1, 0, 0, 0]),
         )
 
         return fridge
@@ -247,16 +242,18 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
 
     @property
     def _default_sensor_configs(self):
-        #pose = sapien.Pose([-1.2, -1.5, 1.7], [1.0, 0.09, 0.3, -0.2])
-        pose = sapien.Pose([0.279123, -0.503438, 1.54794], [0.252428, 0.396735, 0.114442, -0.875091])
+        #pose = sapien.Pose([-0.8, -2.0, 1.2], [1.0, -0.1, 0.2, 0.3])   # Behind view
+        pose = sapien.Pose([0.1, -0.8, 1.54794], [1.0, 0.0, 0.0, 0.0]) # Handle grasp view
+        #pose = sapien.Pose([0.279123, -0.503438, 1.54794], [0.252428, 0.396735, 0.114442, -0.875091])
         return CameraConfig(
             uid="base_camera", pose=pose, width=128, height=128, fov=np.pi / 2, near=0.01, far=100,
         )
 
     @property
     def _default_human_render_camera_configs(self):
-        #pose = sapien.Pose([-1.2, -1.5, 1.7], [1.0, 0.09, 0.3, -0.2])
-        pose = sapien.Pose([0.279123, -0.503438, 1.54794], [0.252428, 0.396735, 0.114442, -0.875091])
+        #pose = sapien.Pose([-0.8, -2.0, 1.2], [1.0, -0.1, 0.2, 0.3])   # Behind view
+        pose = sapien.Pose([-0.35, -1.1, 1.2], [1.0, 0.15, 0.3, -0.65]) # Handle grasp view
+        #pose = sapien.Pose([0.279123, -0.503438, 1.54794], [0.252428, 0.396735, 0.114442, -0.875091])
         return CameraConfig(
             uid="render_camera", pose=pose, width=512, height=512, fov=np.pi / 2, near=0.01, far=100,
         )
@@ -283,17 +280,17 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
             obj_pose = Pose.create_from_pq(p=p, q=qs)
             self.apple.set_pose(obj_pose)
 
-            # Position bowl
-            # p[:, 2] -= 0.2
-            # obj_pose = Pose.create_from_pq(p=p, q=qs)
-            # self.bowl.set_pose(obj_pose)
-
             # Position Fridge
             self.fridge.set_pose(sapien.Pose(p=[0.2, -1.9, -FRIDGE_BOTTOM_Z_OFFSET], q=[1, 0, 0, 0]))
 
             # Position Handle
             self.handle_link_goal.set_pose(
                 Pose.create_from_pq(p=self.handle_link_positions(env_idx))
+            )
+
+            # Positon apple final position
+            self.goal_pos.set_pose(
+                Pose.create_from_pq(p=[0.203933, -1.922682, 1.0])
             )
 
 
@@ -312,7 +309,9 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
 
 
     def evaluate(self):
-        is_grasped = self.agent.left_hand_is_grasping(self.apple, max_angle=85)
+        is_apple_grasped = self.agent.left_hand_is_grasping(self.apple, max_angle=85)
+        is_handle_grasped = self.agent.right_hand_is_grasping(self.handle_link)
+
         door_is_closed = torch.linalg.norm(
             self.fridge.find_link_by_name("link_0").pose.q
             - torch.tensor(door_close_qpos, device=self.device), axis=1
@@ -323,13 +322,16 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
             - torch.tensor(door_open_qpos, device=self.device), axis=1
         ) < 0.05
 
+
+
         apple_fell = self.apple.pose.p[..., 2] <= 0.5
         handle_link_pos = self.handle_link_positions()
 
         return {
-            "success": door_is_open,      # Temporary Success Condition
+            "success": is_handle_grasped,      # Temporary Success Condition
             "fail": apple_fell,
-            "is_grasped": is_grasped,
+            "is_apple_grasped": is_apple_grasped,
+            "is_handle_grasped": is_handle_grasped,
             "door_is_closed": door_is_closed,
             "door_is_open": door_is_open,
             "handle_link_pos": handle_link_pos,
@@ -340,7 +342,7 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
         obs = dict(
             left_hand_tcp_pos = self.agent.left_tcp.pose.p,
             right_hand_tcp_pos = self.agent.right_tcp.pose.p,
-            is_grasped=info["is_grasped"]
+            is_apple_grasped=info["is_apple_grasped"]
         )
         if "state" in self.obs_mode:
             obs.update(
@@ -356,37 +358,87 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
             torch.abs(self.agent.robot.qvel[:, joint_indices]), dim=1
         )
 
+    def _grasp_release_reward(self):
+        """a dense reward that rewards the agent for opening their hand"""
+        return 1 - torch.tanh(self.agent.right_hand_dist_to_open_grasp())
+
+    def _grasp_orientation_reward(self):
+        # Have the z-axis of the palm to point towards the direction vector of the door handle
+        agent_palm_link = self.agent.robot.find_link_by_name("right_palm_link")
+        palm_matrix = agent_palm_link.pose.to_transformation_matrix()
+        palm_z = palm_matrix[:, :3, 2]
+
+        # Direction vector between palm and handle
+        direction = self.handle_link_pos - agent_palm_link.pose.p
+
+        # Normalize to avoid scale issues
+        palm_z = torch.nn.functional.normalize(palm_z, dim=1)
+        direction = torch.nn.functional.normalize(direction, dim=1)
+
+        alignment = torch.sum(palm_z * direction, dim=1)
+        face_handle_reward = torch.tanh(5 * ((alignment + 1) / 2))
+        reward = 2 * face_handle_reward
+
+        # Have the x-axis of the palm align perpendicular to the handle's y/z-axis
+        palm_x = palm_matrix[:, :3, 0]
+        handle_matrix = self.handle_link.get_articulation().get_pose().to_transformation_matrix()
+        handle_y = handle_matrix[:, :3, 1]
+
+        # Normalize to avoid scale issues
+        palm_x = torch.nn.functional.normalize(palm_x, dim=1)
+        handle_y = torch.nn.functional.normalize(handle_y, dim=1)
+
+        alignment = torch.sum(palm_x * handle_y, dim=1)
+        orient_grasp_reward = 1 - torch.tanh(5 * ((alignment + 1) / 2))
+        reward += orient_grasp_reward
+
+        # Create reward function for finger curling as a function of correct orientation
+
+        # Set finger joint positions to lower limits
+
+        # As approaching set finger joint positions to upper limits
+
+        return reward
+
+
+
 
     def compute_dense_reward(self, obs: Any, action: torch.Tensor, info: Dict):
-        # Reach for apple
-        left_tcp_to_obj_dist = torch.linalg.norm(
-            self.apple.pose.p - self.agent.left_tcp.pose.p, axis=1
-        )
-        reaching_apple_reward = 1 - torch.tanh(5 * left_tcp_to_obj_dist)
-        reward = reaching_apple_reward
+        # Left arm reach for apple
+        # left_tcp_to_obj_dist = torch.linalg.norm(
+        #     self.apple.pose.p - self.agent.left_tcp.pose.p, axis=1
+        # )
+        # reaching_apple_reward = 1 - torch.tanh(5 * left_tcp_to_obj_dist)
+        # reward = reaching_apple_reward
 
-        # Grasp apple
-        is_grasped = info["is_grasped"]
-        reward += is_grasped
+        # # Grasp apple
+        # is_apple_grasped = info["is_apple_grasped"]
+        # reward += is_apple_grasped
 
-
-        right_arm_velocity = self.joint_velocity(self.right_arm_joint_indexes)
-        right_arm_static_reward = 1 - torch.tanh(5 * right_arm_velocity)
-        reward[~is_grasped] += right_arm_static_reward[~is_grasped]
-
-        left_arm_velocity = self.joint_velocity(self.left_arm_joint_indexes)
-        left_arm_static_reward = 1 - torch.tanh(5 * left_arm_velocity)
-        reward[is_grasped] += left_arm_static_reward[is_grasped]
+        # Hold right arm steady while left arm goes to grasp apple
+        # right_arm_velocity = self.joint_velocity(self.right_arm_joint_indexes)
+        # right_arm_static_reward = 1 - torch.tanh(5 * right_arm_velocity)
+        # reward[~is_apple_grasped] += right_arm_static_reward[~is_apple_grasped]
 
         ## CONSIDER 
         # Reward for grasping apple stable
-        # Add function to detect grasping with handle using get_pairwise_contact_forces
+        # left_arm_velocity = self.joint_velocity(self.left_arm_joint_indexes)
+        # left_arm_static_reward = 1 - torch.tanh(5 * left_arm_velocity)
+        # reward[is_apple_grasped] += left_arm_static_reward[is_apple_grasped]
 
+        # Right arm reach for door handle
         right_tcp_to_handle_dist = torch.linalg.norm(
             info["handle_link_pos"] - self.agent.right_tcp.pose.p, axis=1 
         )
         reaching_handle_reward = 1 - torch.tanh(5 * right_tcp_to_handle_dist)
-        reward[is_grasped] += reaching_handle_reward[is_grasped]
+        reward = 2 * reaching_handle_reward
+
+        # Orient hand for grasp
+        reward += self._grasp_orientation_reward()
+
+        # Grasp door handle
+        is_handle_grasped = info["is_handle_grasped"]
+        reward += is_handle_grasped
 
         # Reward to open the door
         open_fridge_diff = torch.linalg.norm(
@@ -394,26 +446,35 @@ class UnitreeG1PutInFridge(HumanoidPickPlaceEnv):
             - torch.tensor(door_open_qpos, device=self.device), axis=1
         )
         open_door_reward = 1 - torch.tanh(5 * open_fridge_diff)
-        reward[is_grasped] += open_door_reward[is_grasped]
+        reward[is_handle_grasped] += open_door_reward[is_handle_grasped]
+
+        door_is_open = info["door_is_open"]
+
+        #Bring apple to fridge shelf
+        # apple_to_shelf_dist = torch.linalg.norm(
+        #     self.apple.pose.p - self.goal_pos.pose.p, axis=1
+        # )
+        # reaching_goal_reward = 1 - torch.tanh(5 * apple_to_shelf_dist)
+        # reward[door_is_open] += reaching_goal_reward[door_is_open]
 
         reward[info["fail"]] = 0.0
-        reward[info["success"]] = 5.0
+        reward[info["success"]] = 8.0
 
         return reward
 
     def compute_normalized_dense_reward(
         self, obs: Any, action: torch.Tensor, info: Dict
     ):
-        max_reward = 5.0
+        max_reward = 8.0
         return self.compute_dense_reward(obs=obs, action=action, info=info) / max_reward
     
 """
 CUDA_VISIBLE_DEVICES=0 python ppo.py --env_id="G1RL-v1" --no-capture-video \
     --num_envs=2048 --update_epochs=8 --num_minibatches=32 \
-    --total_timesteps=8_000_000 --eval_freq=10 --num-steps=20
+    --total_timesteps=16_000_000 --eval_freq=10 --num-steps=20
     
 CUDA_VISIBLE_DEVICES=0 python ppo.py --env_id="G1RL-v1" --capture-video \
-    --evaluate --checkpoint=runs/G1RL-v1__ppo__1__1753382916/final_ckpt.pt \
+    --evaluate --checkpoint=runs/G1RL-v1__ppo__1__1754506501/final_ckpt.pt \
     --num_eval_envs=6 --num-eval-steps=1500 
 
 watch -n 1 nvidia-smi
